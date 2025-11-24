@@ -44,8 +44,8 @@ Tired of cluttered "Downloads" or "Desktop" folders? Sortify automates the clean
 
 1.  Clone the repository and navigate into the project directory:
     ```bash
-    git clone https://github.com/abdulrahman20242/File-Organizer_v2.1.git
-    cd File-Organizer_v2.1
+    git clone https://github.com/abdulrahman20242/File-Organizer_v2.3.git
+    cd File-Organizer_v2.3
     ```
 
 2.  **Create and activate a virtual environment (Recommended):**
