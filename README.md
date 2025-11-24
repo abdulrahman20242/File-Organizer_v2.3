@@ -115,6 +115,22 @@ This project includes a comprehensive test suite to ensure the core logic is wor
     ```bash
     pytest -v
     ```
+    ```bash
+    pytest test_organizer.py -v
+    ```
+    ```bash
+    pytest test_organizer.py -q
+    ```
+    ```bash
+    pip install pytest-cov
+pytest test_organizer.py --cov=file_organizer --cov-report=html
+    ```
+    ```bash
+    pytest test_organizer.py::TestUndo -v
+    ```
+    ```bash
+    pytest test_organizer.py::TestUndo::test_undo_move_operation -v
+    ```
 
 ---
 
