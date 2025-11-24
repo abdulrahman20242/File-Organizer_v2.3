@@ -15,6 +15,7 @@ from PySide6.QtGui import QColor, QAction, QKeySequence, QActionGroup
 
 import qtawesome as qta
 import file_organizer
+from category_editor import EnhancedCategoryEditorDialog
 
 # Try to import qdarktheme
 try:
@@ -26,6 +27,7 @@ except ImportError:
 BASE_DIR = Path(__file__).parent
 SETTINGS_FILE = BASE_DIR / "settings.json"
 PROFILES_FILE = BASE_DIR / "profiles.json"
+
 
 class Translator:
     def __init__(self, lang="en"):
@@ -44,6 +46,7 @@ class Translator:
     def t(self, key, default=None):
         return self.data.get(self.lang, {}).get(key, self.data.get("en", {}).get(key, default or key))
 
+
 class QtLogHandler(logging.Handler):
     def __init__(self, log_signal: Signal):
         super().__init__()
@@ -52,6 +55,7 @@ class QtLogHandler(logging.Handler):
     def emit(self, record):
         msg = self.format(record)
         self.log_signal.emit(msg)
+
 
 def get_last_undo_destination() -> str:
     """Efficiently reads the last line from undo log."""
@@ -68,6 +72,7 @@ def get_last_undo_destination() -> str:
             return parts[-1] if len(parts) == 3 else "N/A"
     except Exception:
         return "..."
+
 
 class OrganizerWorker(QThread):
     progress_updated = Signal(int, int)
@@ -136,6 +141,7 @@ class OrganizerWorker(QThread):
         if 'cancel_event' in self.params:
             self.params['cancel_event'].set()
 
+
 class UndoWorker(QThread):
     progress_updated = Signal(int, int)
     finished = Signal(dict)
@@ -163,144 +169,6 @@ class UndoWorker(QThread):
         stats = file_organizer.perform_undo(on_progress=on_progress_callback)
         self.finished.emit(stats)
 
-class CategoryEditorDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.tr = parent.tr
-        self.setWindowTitle(self.tr.t("manage_categories"))
-        self.setMinimumSize(600, 400)
-        self.categories_data = {k: list(v) for k, v in file_organizer.load_categories().items()}
-        
-        layout = QHBoxLayout(self)
-        
-        cat_layout = QVBoxLayout()
-        cat_layout.addWidget(QLabel(self.tr.t("categories")))
-        self.cat_list = QListWidget()
-        self.cat_list.itemSelectionChanged.connect(self.update_ext_list)
-        cat_layout.addWidget(self.cat_list)
-        
-        cat_btn_layout = QHBoxLayout()
-        self.btn_add_cat = QPushButton(self.tr.t("add"))
-        self.btn_add_cat.clicked.connect(self.add_category)
-        self.btn_rename_cat = QPushButton(self.tr.t("rename"))
-        self.btn_rename_cat.clicked.connect(self.rename_category)
-        self.btn_remove_cat = QPushButton(self.tr.t("remove"))
-        self.btn_remove_cat.clicked.connect(self.remove_category)
-        cat_btn_layout.addWidget(self.btn_add_cat)
-        cat_btn_layout.addWidget(self.btn_rename_cat)
-        cat_btn_layout.addWidget(self.btn_remove_cat)
-        cat_layout.addLayout(cat_btn_layout)
-        layout.addLayout(cat_layout)
-        
-        ext_layout = QVBoxLayout()
-        ext_layout.addWidget(QLabel(self.tr.t("extensions")))
-        self.ext_list = QListWidget()
-        ext_layout.addWidget(self.ext_list)
-        
-        ext_btn_layout = QHBoxLayout()
-        self.btn_add_ext = QPushButton(self.tr.t("add"))
-        self.btn_add_ext.clicked.connect(self.add_extension)
-        self.btn_remove_ext = QPushButton(self.tr.t("remove"))
-        self.btn_remove_ext.clicked.connect(self.remove_extension)
-        ext_btn_layout.addWidget(self.btn_add_ext)
-        ext_btn_layout.addWidget(self.btn_remove_ext)
-        ext_layout.addLayout(ext_btn_layout)
-        layout.addLayout(ext_layout)
-        
-        main_v_layout = QVBoxLayout()
-        main_v_layout.addLayout(layout)
-        self.btn_save = QPushButton(qta.icon('fa5s.save'), self.tr.t("save_and_close"))
-        self.btn_save.clicked.connect(self.save_and_accept)
-        main_v_layout.addWidget(self.btn_save)
-        self.setLayout(main_v_layout)
-        self.populate_cat_list()
-    
-    def populate_cat_list(self):
-        self.cat_list.clear()
-        for cat in sorted(self.categories_data.keys()):
-            self.cat_list.addItem(QListWidgetItem(cat))
-    
-    def update_ext_list(self):
-        self.ext_list.clear()
-        selected = self.cat_list.selectedItems()
-        if not selected:
-            return
-        cat = selected[0].text()
-        for ext in sorted(self.categories_data.get(cat, [])):
-            self.ext_list.addItem(QListWidgetItem(ext))
-    
-    def add_category(self):
-        text, ok = QInputDialog.getText(self, self.tr.t("add_category"), self.tr.t("category_name"))
-        if ok and text:
-            if text in self.categories_data:
-                QMessageBox.warning(self, self.tr.t("error"), f"Category '{text}' already exists.")
-                return
-            self.categories_data[text] = []
-            self.populate_cat_list()
-    
-    def rename_category(self):
-        selected = self.cat_list.selectedItems()
-        if not selected:
-            QMessageBox.warning(self, self.tr.t("error"), "Please select a category to rename.")
-            return
-        old = selected[0].text()
-        new, ok = QInputDialog.getText(self, self.tr.t("rename_category"), self.tr.t("new_name"), text=old)
-        if ok and new and new != old:
-            if new in self.categories_data:
-                QMessageBox.warning(self, self.tr.t("error"), f"Category '{new}' already exists.")
-                return
-            self.categories_data[new] = self.categories_data.pop(old)
-            self.populate_cat_list()
-    
-    def remove_category(self):
-        selected = self.cat_list.selectedItems()
-        if not selected:
-            QMessageBox.warning(self, self.tr.t("error"), "Please select a category to remove.")
-            return
-        cat = selected[0].text()
-        if QMessageBox.question(
-            self,
-            self.tr.t("confirm_delete"),
-            self.tr.t("confirm_delete_cat_msg").format(cat)
-        ) == QMessageBox.StandardButton.Yes:
-            del self.categories_data[cat]
-            self.populate_cat_list()
-            self.ext_list.clear()
-    
-    def add_extension(self):
-        selected = self.cat_list.selectedItems()
-        if not selected:
-            QMessageBox.warning(self, self.tr.t("error"), "Please select a category first.")
-            return
-        cat = selected[0].text()
-        text, ok = QInputDialog.getText(self, self.tr.t("add_extension"), self.tr.t("extension_name"))
-        if ok and text:
-            ext = text.lower() if text.startswith('.') else '.' + text.lower()
-            if ext in self.categories_data[cat]:
-                QMessageBox.warning(self, self.tr.t("error"), f"Extension '{ext}' already exists in this category.")
-                return
-            self.categories_data[cat].append(ext)
-            self.update_ext_list()
-    
-    def remove_extension(self):
-        cat_sel = self.cat_list.selectedItems()
-        ext_sel = self.ext_list.selectedItems()
-        if not cat_sel or not ext_sel:
-            QMessageBox.warning(self, self.tr.t("error"), "Please select a category and an extension.")
-            return
-        cat = cat_sel[0].text()
-        ext = ext_sel[0].text()
-        self.categories_data[cat].remove(ext)
-        self.update_ext_list()
-    
-    def save_and_accept(self):
-        try:
-            with open(file_organizer.CATEGORIES_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self.categories_data, f, indent=2, sort_keys=True)
-            QMessageBox.information(self, self.tr.t("success"), self.tr.t("categories_saved"))
-            self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, self.tr.t("error"), f"{self.tr.t('categories_save_error')}\n{e}")
 
 class PathLineEdit(QLineEdit):
     def __init__(self, parent=None):
@@ -318,6 +186,7 @@ class PathLineEdit(QLineEdit):
             url = urls[0]
             if url.isLocalFile():
                 self.setText(url.toLocalFile())
+
 
 class ManageProfilesDialog(QDialog):
     def __init__(self, profiles, parent=None):
@@ -357,6 +226,7 @@ class ManageProfilesDialog(QDialog):
             self.profile_list.takeItem(self.profile_list.row(selected))
             self.parent()._save_profiles()
             self.parent()._update_profiles_menu()
+
 
 class FileOrganizerGUI(QMainWindow):
     log_signal = Signal(str)
@@ -552,7 +422,7 @@ class FileOrganizerGUI(QMainWindow):
         """Setup timer for batch table updates."""
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self._flush_results_buffer)
-        self.update_timer.setInterval(100)  # Update every 100ms
+        self.update_timer.setInterval(100)
     
     def _create_table_context_menu(self, pos):
         item = self.table_view.itemAt(pos)
@@ -680,7 +550,6 @@ class FileOrganizerGUI(QMainWindow):
             self.update_timer.stop()
             return
         
-        # Process up to 50 results at a time
         batch = self.results_buffer[:50]
         self.results_buffer = self.results_buffer[50:]
         
@@ -729,11 +598,9 @@ class FileOrganizerGUI(QMainWindow):
             QMessageBox.warning(self, "Error", f"Could not save profiles: {e}")
     
     def _update_profiles_menu(self):
-        # Remove old profile actions
         for action in self.profiles_menu.actions()[3:]:
             self.profiles_menu.removeAction(action)
         
-        # Add current profiles
         for name in sorted(self.profiles.keys()):
             action = QAction(name, self)
             action.triggered.connect(lambda checked, n=name: self.load_profile(n))
@@ -815,8 +682,14 @@ class FileOrganizerGUI(QMainWindow):
     
     @Slot()
     def open_category_editor(self):
-        dialog = CategoryEditorDialog(self)
+        """فتح محرر الفئات المحسّن"""
+        dialog = EnhancedCategoryEditorDialog(self)
+        dialog.categories_changed.connect(self._on_categories_changed)
         dialog.exec()
+    
+    def _on_categories_changed(self):
+        """عند تغيير الفئات"""
+        self.log_signal.emit("✅ Categories updated successfully!")
     
     @Slot()
     def run_organizer(self):
@@ -833,7 +706,6 @@ class FileOrganizerGUI(QMainWindow):
             QMessageBox.warning(self, self.tr.t("error"), self.tr.t("invalid_source"))
             return
         
-        # Validate paths
         valid, error_msg = file_organizer.validate_paths(source, dest)
         if not valid:
             QMessageBox.critical(self, self.tr.t("error"), error_msg)
@@ -878,7 +750,6 @@ class FileOrganizerGUI(QMainWindow):
     
     @Slot(dict, bool)
     def on_worker_finished(self, stats, cancelled):
-        # Flush any remaining results
         self._flush_results_buffer()
         
         self.progress.setVisible(False)
@@ -977,6 +848,7 @@ class FileOrganizerGUI(QMainWindow):
                 QMessageBox.warning(self, "Error", f"Could not open folder: {dest}")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not open folder: {e}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
